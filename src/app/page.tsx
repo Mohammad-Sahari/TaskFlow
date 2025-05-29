@@ -192,24 +192,24 @@ export default function HomePage() {
              completedDate <= endOfToday;
     });
 
-    let report = `گزارش وظایف روزانه - ${reportDate}\n`; // "Daily Task Report" in Farsi
+    let report = `Daily Task Report - ${reportDate}\n`;
     report += "===================================\n\n";
 
     if (completedTodayTasks.length === 0) {
-      report += "امروز هیچ وظیفه‌ای انجام نشده است.\n"; // "No tasks completed today." in Farsi
+      report += "No tasks completed today.\n";
     } else {
       let totalTimeOverall = 0;
       completedTodayTasks.forEach(task => {
-        report += `وظیفه: ${task.title}\n`; // "Task:" in Farsi
+        report += `Task: ${task.title}\n`;
         if (task.description) {
-          report += `توضیحات: ${task.description}\n`; // "Description:" in Farsi
+          report += `Description: ${task.description}\n`;
         }
-        report += `زمان صرف شده: ${formatTime(task.totalTimeLogged!)}\n`; // "Time Taken:" in Farsi
+        report += `Time Taken: ${formatTime(task.totalTimeLogged!)}\n`;
         report += "-----------------------------------\n";
         totalTimeOverall += task.totalTimeLogged!;
       });
-      report += `\nتعداد کل وظایف انجام شده امروز: ${completedTodayTasks.length}\n`; // "Total tasks completed today:" in Farsi
-      report += `کل زمان ثبت شده امروز: ${formatTime(totalTimeOverall)}\n`; // "Total time logged today:" in Farsi
+      report += `\nTotal tasks completed today: ${completedTodayTasks.length}\n`;
+      report += `Total time logged today: ${formatTime(totalTimeOverall)}\n`;
     }
     
     setDailyReportText(report);
