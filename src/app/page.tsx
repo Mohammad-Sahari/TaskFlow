@@ -1,15 +1,16 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
 import { Header } from '@/components/Header';
 import { TaskColumn } from '@/components/TaskColumn';
 import { TaskForm } from '@/components/TaskForm';
-import { DailyReportDialog } from '@/components/DailyReportDialog'; // New Import
+import { DailyReportDialog } from '@/components/DailyReportDialog';
 import { type Task, type TaskStatus } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { type z } from "zod";
 import { type taskFormSchema } from "@/components/TaskForm";
-import { formatTime } from '@/lib/utils'; // Import formatTime
+import { formatTime } from '@/lib/utils';
 
 type TaskFormValues = z.infer<ReturnType<() => typeof taskFormSchema>>;
 
@@ -19,7 +20,6 @@ export default function HomePage() {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const { toast } = useToast();
 
-  // State for Daily Report Dialog
   const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
   const [dailyReportText, setDailyReportText] = useState("");
 
@@ -138,7 +138,6 @@ export default function HomePage() {
       updates.totalTimeLogged = finalElapsedTime;
       updates.isTimerRunning = false;
       updates.timerStartTime = null;
-      // Ensure updatedAt reflects completion time
       updates.updatedAt = new Date(); 
     }
     
@@ -173,37 +172,44 @@ export default function HomePage() {
 
   const handleOpenDailyReportDialog = () => {
     const today = new Date();
-    const reportDate = today.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    // Format date in Shamsi Hijri (Persian calendar)
+    const reportDate = new Intl.DateTimeFormat('fa-IR', {
+      calendar: 'persian',
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }).format(today);
     
     const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
     const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
 
     const completedTodayTasks = tasks.filter(task => {
-      const completedDate = new Date(task.updatedAt); // Using updatedAt as completion timestamp
+      const completedDate = new Date(task.updatedAt);
       return task.status === 'done' && 
              task.totalTimeLogged !== null &&
              completedDate >= startOfToday && 
              completedDate <= endOfToday;
     });
 
-    let report = `Daily Task Report - ${reportDate}\n`;
+    let report = `گزارش وظایف روزانه - ${reportDate}\n`; // "Daily Task Report" in Farsi
     report += "===================================\n\n";
 
     if (completedTodayTasks.length === 0) {
-      report += "No tasks completed today.\n";
+      report += "امروز هیچ وظیفه‌ای انجام نشده است.\n"; // "No tasks completed today." in Farsi
     } else {
       let totalTimeOverall = 0;
       completedTodayTasks.forEach(task => {
-        report += `Task: ${task.title}\n`;
+        report += `وظیفه: ${task.title}\n`; // "Task:" in Farsi
         if (task.description) {
-          report += `Description: ${task.description}\n`;
+          report += `توضیحات: ${task.description}\n`; // "Description:" in Farsi
         }
-        report += `Time Taken: ${formatTime(task.totalTimeLogged!)}\n`;
+        report += `زمان صرف شده: ${formatTime(task.totalTimeLogged!)}\n`; // "Time Taken:" in Farsi
         report += "-----------------------------------\n";
         totalTimeOverall += task.totalTimeLogged!;
       });
-      report += `\nTotal tasks completed today: ${completedTodayTasks.length}\n`;
-      report += `Total time logged today: ${formatTime(totalTimeOverall)}\n`;
+      report += `\nتعداد کل وظایف انجام شده امروز: ${completedTodayTasks.length}\n`; // "Total tasks completed today:" in Farsi
+      report += `کل زمان ثبت شده امروز: ${formatTime(totalTimeOverall)}\n`; // "Total time logged today:" in Farsi
     }
     
     setDailyReportText(report);
