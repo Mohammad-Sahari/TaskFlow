@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Edit2, Trash2, Play, Pause, Clock } from 'lucide-react';
 import { type Task, type TaskStatus } from '@/lib/types';
-import { cn } from '@/lib/utils';
+import { cn, formatTime } from '@/lib/utils';
 
 interface TaskCardProps {
   task: Task;
@@ -16,20 +16,6 @@ interface TaskCardProps {
   onToggleTimer: (taskId: string, running: boolean) => void;
   onTimerTick: (taskId: string, currentTime: number) => void; // For parent to potentially sync if needed
 }
-
-function formatTime(totalSeconds: number): string {
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = Math.floor(totalSeconds % 60);
-
-  const parts: string[] = [];
-  if (hours > 0) parts.push(`${hours}h`);
-  if (minutes > 0 || hours > 0) parts.push(`${minutes}m`); // Show minutes if hours are shown or if minutes > 0
-  parts.push(`${seconds}s`);
-  
-  return parts.join(' ');
-}
-
 
 export function TaskCard({ task, onEdit, onDelete, onStatusChange, onToggleTimer, onTimerTick }: TaskCardProps) {
   const [displayTime, setDisplayTime] = useState(task.elapsedTime);

@@ -4,12 +4,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { Header } from '@/components/Header';
 import { TaskColumn } from '@/components/TaskColumn';
 import { TaskForm } from '@/components/TaskForm';
+import { DailyReportDialog } from '@/components/DailyReportDialog'; // New Import
 import { type Task, type TaskStatus } from '@/lib/types';
 import { useToast } from "@/hooks/use-toast";
 import { type z } from "zod";
-import { type taskFormSchema } from "@/components/TaskForm"; // Assuming TaskForm exports its schema type or Zod object
+import { type taskFormSchema } from "@/components/TaskForm";
+import { formatTime } from '@/lib/utils'; // Import formatTime
 
-type TaskFormValues = z.infer<ReturnType<() => typeof taskFormSchema>>; // Adjust if schema export is different
+type TaskFormValues = z.infer<ReturnType<() => typeof taskFormSchema>>;
 
 export default function HomePage() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -17,7 +19,10 @@ export default function HomePage() {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const { toast } = useToast();
 
-  // Load tasks from local storage on initial mount
+  // State for Daily Report Dialog
+  const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
+  const [dailyReportText, setDailyReportText] = useState("");
+
   useEffect(() => {
     const storedTasks = localStorage.getItem('taskflow-tasks');
     if (storedTasks) {
@@ -30,11 +35,9 @@ export default function HomePage() {
         setTasks(parsedTasks);
       } catch (error) {
         console.error("Failed to parse tasks from local storage", error);
-        setTasks([]); // Fallback to empty if parsing fails
+        setTasks([]);
       }
     } else {
-       // Initialize with sample tasks if nothing in local storage and tasks array is empty
-       // This ensures crypto.randomUUID is called client-side
        if(tasks.length === 0) {
         setTasks([
           { id: crypto.randomUUID(), title: "Welcome to TaskFlow!", description: "Drag this task or create new ones.", status: "todo", createdAt: new Date(), updatedAt: new Date(), elapsedTime: 0, timerStartTime: null, isTimerRunning: false, totalTimeLogged: null },
@@ -42,15 +45,13 @@ export default function HomePage() {
         ]);
        }
     }
-  }, []); // Empty dependency array ensures this runs only once on mount
+  }, []);
 
-  // Save tasks to local storage whenever tasks change
   useEffect(() => {
-    if(tasks.length > 0 || localStorage.getItem('taskflow-tasks')) { // Only save if tasks exist or were previously stored
+    if(tasks.length > 0 || localStorage.getItem('taskflow-tasks')) {
       localStorage.setItem('taskflow-tasks', JSON.stringify(tasks));
     }
   }, [tasks]);
-
 
   const handleOpenTaskForm = (taskToEdit?: Task) => {
     setEditingTask(taskToEdit || null);
@@ -76,7 +77,7 @@ export default function HomePage() {
       const newTask: Task = {
         id: crypto.randomUUID(),
         ...values,
-        description: values.description || "", // Ensure description is always a string
+        description: values.description || "",
         status: 'todo',
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -118,7 +119,6 @@ export default function HomePage() {
 
     let updates: Partial<Task> = { status: newStatus };
 
-    // Logic when moving OUT of 'inprogress'
     if (task.status === 'inprogress' && newStatus !== 'inprogress') {
       if (task.isTimerRunning && task.timerStartTime) {
         const sessionDuration = (Date.now() - task.timerStartTime) / 1000;
@@ -128,23 +128,18 @@ export default function HomePage() {
       updates.timerStartTime = null;
     }
 
-    // Logic when moving INTO 'inprogress'
     if (newStatus === 'inprogress' && task.status !== 'inprogress') {
       updates.isTimerRunning = true;
       updates.timerStartTime = Date.now();
-      // elapsedTime remains, current session starts fresh
     }
     
-    // Logic when moving INTO 'done'
     if (newStatus === 'done') {
-      // If it was in 'inprogress' and timer running, elapsedTime would have been updated above
-      // If it was already updated (e.g. paused then moved), use that
-      updates.totalTimeLogged = updates.elapsedTime !== undefined ? updates.elapsedTime : task.elapsedTime;
-      updates.isTimerRunning = false; // Ensure timer is stopped
+      const finalElapsedTime = updates.elapsedTime !== undefined ? updates.elapsedTime : task.elapsedTime;
+      updates.totalTimeLogged = finalElapsedTime;
+      updates.isTimerRunning = false;
       updates.timerStartTime = null;
-    } else {
-       // If moving out of 'done', clear totalTimeLogged (optional, depends on desired behavior)
-       // updates.totalTimeLogged = null; 
+      // Ensure updatedAt reflects completion time
+      updates.updatedAt = new Date(); 
     }
     
     updateTaskTimerState(taskId, updates);
@@ -156,12 +151,12 @@ export default function HomePage() {
     if (!task || task.status !== 'inprogress') return;
 
     let updates: Partial<Task>;
-    if (shouldRun) { // Start or Resume timer
+    if (shouldRun) {
       updates = {
         isTimerRunning: true,
         timerStartTime: Date.now(),
       };
-    } else { // Pause timer
+    } else {
       const sessionDuration = task.timerStartTime ? (Date.now() - task.timerStartTime) / 1000 : 0;
       updates = {
         isTimerRunning: false,
@@ -172,15 +167,48 @@ export default function HomePage() {
     updateTaskTimerState(taskId, updates);
   };
   
-  // This function is called by TaskCard's useEffect timer.
-  // It's mainly for potential future use if global sync is needed.
-  // For now, the TaskCard manages its displayTime locally based on task props.
   const handleTimerTick = useCallback((taskId: string, currentTime: number) => {
     // console.log(`Task ${taskId} ticked: ${currentTime}`);
-    // This could be used to persist current time more frequently if needed,
-    // but local storage on tasks array change should be sufficient.
   }, []);
 
+  const handleOpenDailyReportDialog = () => {
+    const today = new Date();
+    const reportDate = today.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    
+    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0, 0);
+    const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999);
+
+    const completedTodayTasks = tasks.filter(task => {
+      const completedDate = new Date(task.updatedAt); // Using updatedAt as completion timestamp
+      return task.status === 'done' && 
+             task.totalTimeLogged !== null &&
+             completedDate >= startOfToday && 
+             completedDate <= endOfToday;
+    });
+
+    let report = `Daily Task Report - ${reportDate}\n`;
+    report += "===================================\n\n";
+
+    if (completedTodayTasks.length === 0) {
+      report += "No tasks completed today.\n";
+    } else {
+      let totalTimeOverall = 0;
+      completedTodayTasks.forEach(task => {
+        report += `Task: ${task.title}\n`;
+        if (task.description) {
+          report += `Description: ${task.description}\n`;
+        }
+        report += `Time Taken: ${formatTime(task.totalTimeLogged!)}\n`;
+        report += "-----------------------------------\n";
+        totalTimeOverall += task.totalTimeLogged!;
+      });
+      report += `\nTotal tasks completed today: ${completedTodayTasks.length}\n`;
+      report += `Total time logged today: ${formatTime(totalTimeOverall)}\n`;
+    }
+    
+    setDailyReportText(report);
+    setIsReportDialogOpen(true);
+  };
 
   const taskColumns: { title: string; status: TaskStatus }[] = [
     { title: 'To Do', status: 'todo' },
@@ -190,7 +218,10 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <Header onOpenTaskForm={() => handleOpenTaskForm()} />
+      <Header 
+        onOpenTaskForm={() => handleOpenTaskForm()}
+        onOpenDailyReportDialog={handleOpenDailyReportDialog} 
+      />
       <main className="flex-grow container mx-auto p-4 md:p-8">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {taskColumns.map(col => (
@@ -204,7 +235,7 @@ export default function HomePage() {
               onTaskStatusChange={handleTaskStatusChange}
               onToggleTimer={handleToggleTimer}
               onTimerTick={handleTimerTick}
-              onDropTask={handleTaskStatusChange} // Drag and drop directly changes status
+              onDropTask={handleTaskStatusChange}
             />
           ))}
         </div>
@@ -214,6 +245,11 @@ export default function HomePage() {
         onClose={handleCloseTaskForm} 
         onSubmit={handleTaskSubmit}
         existingTask={editingTask}
+      />
+      <DailyReportDialog
+        isOpen={isReportDialogOpen}
+        onClose={() => setIsReportDialogOpen(false)}
+        reportText={dailyReportText}
       />
     </div>
   );
